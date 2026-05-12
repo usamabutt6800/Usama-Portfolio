@@ -1,8 +1,6 @@
 // src/api/axios.ts
 import axios from 'axios';
 
-// Dev: Vite proxy → localhost:5000
-// Production on Vercel: same domain so /api works directly
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
@@ -12,7 +10,6 @@ const api = axios.create({
   timeout: 15000,
 });
 
-// Attach JWT token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('portfolio_token');
@@ -22,7 +19,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle 401
 api.interceptors.response.use(
   (response) => response,
   (error) => {

@@ -11,17 +11,16 @@ interface Props {
   children: string;
   className?: string;
   delay?: number;
-  tag?: keyof JSX.IntrinsicElements;
+  as?: 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'span' | 'div';
 }
 
-const TextReveal = ({ children, className = '', delay = 0, tag: Tag = 'p' }: Props) => {
+const TextReveal = ({ children, className = '', delay = 0, as: Tag = 'p' }: Props) => {
   const containerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    // Split text into individual words
     const words = children.split(' ');
     el.innerHTML = words
       .map(word => `<span class="inline-block overflow-hidden"><span class="inline-block translate-y-full">${word}</span></span>`)
@@ -45,7 +44,13 @@ const TextReveal = ({ children, className = '', delay = 0, tag: Tag = 'p' }: Pro
     return () => { ScrollTrigger.getAll().forEach(t => t.kill()); };
   }, [children, delay]);
 
-  return <Tag ref={containerRef as React.RefObject<HTMLParagraphElement>} className={className} />;
+  // Use createElement to avoid TypeScript JSX tag issues
+  return (
+    <Tag
+      ref={containerRef as React.RefObject<HTMLParagraphElement>}
+      className={className}
+    />
+  );
 };
 
 export default TextReveal;
