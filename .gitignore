@@ -2,11 +2,12 @@
 node_modules/
 .npm
 
-# ── Environment variables (NEVER commit these) ────────────────────────────────
+# ── Environment variables — NEVER commit these ────────────────────────────────
 .env
 .env.local
-.env.production
 .env.development
+.env.production.local
+# NOTE: .env.production IS committed (contains only public VITE_ variables)
 
 # ── Build outputs ─────────────────────────────────────────────────────────────
 dist/
@@ -16,15 +17,19 @@ build/
 logs/
 *.log
 npm-debug.log*
+yarn-error.log
 
-# ── OS files ──────────────────────────────────────────────────────────────────
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
 Thumbs.db
+desktop.ini
 
 # ── Editor ────────────────────────────────────────────────────────────────────
 .vscode/settings.json
 .idea/
+*.swp
 
-# ── Uploads (local images — use Cloudinary in production) ────────────────────
+# ── Local uploads folder (use Cloudinary in production) ──────────────────────
 server/src/uploads/*
 !server/src/uploads/.gitkeep

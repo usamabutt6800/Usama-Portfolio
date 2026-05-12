@@ -1,19 +1,9 @@
-# Dependencies
 node_modules/
-
-# Environment (NEVER commit)
 .env
 .env.local
-.env.production
-
-# Logs
+.env.production.local
 *.log
-npm-debug.log*
-
-# Local uploads (use Cloudinary in production)
 src/uploads/*
 !src/uploads/.gitkeep
-
-# OS
 .DS_Store
 Thumbs.db

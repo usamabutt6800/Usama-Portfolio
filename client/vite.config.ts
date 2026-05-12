@@ -1,4 +1,3 @@
-// vite.config.ts
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
@@ -7,13 +6,12 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      // @ = src/ — use like: import Button from '@/components/ui/Button'
       '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
     port: 5173,
-    // Proxy API calls to backend during development
+    // Proxy /api calls to backend in development only
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
@@ -23,13 +21,14 @@ export default defineConfig({
     },
   },
   build: {
-    // Split chunks for better caching
+    // Generate sourcemaps for debugging
+    sourcemap: false,
+    // Chunk splitting for better caching
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
+          vendor:     ['react', 'react-dom', 'react-router-dom'],
           animations: ['framer-motion', 'gsap'],
-          three: ['three', '@react-three/fiber', '@react-three/drei'],
         },
       },
     },
