@@ -59,8 +59,7 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('combined'));
 }
 
-// ─── Static uploads ───────────────────────────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Images stored as Base64 in MongoDB — no static uploads folder needed
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',         require('./routes/authRoutes'));

@@ -1,68 +1,20 @@
 /**
  * controllers/projectController.js
- * Fixed: techStack parsing + local image fallback (no Cloudinary needed)
+ * Images stored as Base64 in MongoDB — no Cloudinary needed
  */
 
 const Project = require('../models/Project');
 const { catchAsync, AppError, sendSuccess } = require('../utils/errorHandler');
-const path = require('path');
-const fs = require('fs');
+const { uploadToCloudinary } = require('../middleware/uploadMiddleware');
 
-// ─── Check if Cloudinary is properly configured ───────────────────────────────
-const isCloudinaryConfigured = () =>
-  process.env.CLOUDINARY_CLOUD_NAME &&
-  process.env.CLOUDINARY_CLOUD_NAME !== 'your_cloud_name' &&
-  process.env.CLOUDINARY_API_KEY &&
-  process.env.CLOUDINARY_API_KEY !== 'your_api_key';
-
-// ─── Save image locally to server/src/uploads/ ───────────────────────────────
-const saveLocalImage = (buffer, originalname) => {
-  const uploadsDir = path.join(__dirname, '../uploads');
-  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-  const ext = originalname.split('.').pop();
-  const filename = `project_${Date.now()}.${ext}`;
-  fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-
-  const serverUrl = `http://localhost:${process.env.PORT || 5000}`;
-  return {
-    url: `${serverUrl}/uploads/${filename}`,
-    publicId: `local_${filename}`,
-  };
-};
-
-// ─── Delete local image ───────────────────────────────────────────────────────
-const deleteLocalImage = (publicId) => {
-  try {
-    if (publicId && publicId.startsWith('local_')) {
-      const filename = publicId.replace('local_', '');
-      const filepath = path.join(__dirname, '../uploads', filename);
-      if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
-    }
-  } catch (e) { /* silent */ }
-};
-
-// ─── Handle image upload (Cloudinary or local) ────────────────────────────────
-const handleImageUpload = async (file) => {
-  if (isCloudinaryConfigured()) {
-    const { uploadToCloudinary } = require('../middleware/uploadMiddleware');
-    const result = await uploadToCloudinary(file.buffer, 'portfolio/projects');
-    return { url: result.secure_url, publicId: result.public_id };
-  }
-  return saveLocalImage(file.buffer, file.originalname);
-};
-
-// ─── Parse techStack — handles both JSON array string and comma-separated ─────
+// ─── Parse techStack ──────────────────────────────────────────────────────────
 const parseTechStack = (techStack) => {
   if (!techStack) return [];
   if (Array.isArray(techStack)) return techStack;
-  // Try JSON parse first (e.g. '["React","Node.js"]')
   try {
     const parsed = JSON.parse(techStack);
     if (Array.isArray(parsed)) return parsed.map(t => t.trim()).filter(Boolean);
-  } catch {
-    // Fall back to comma-separated (e.g. "React, Node.js, MongoDB")
-  }
+  } catch { /* fall through */ }
   return techStack.split(',').map(t => t.trim()).filter(Boolean);
 };
 
@@ -73,7 +25,9 @@ exports.getAllProjects = catchAsync(async (req, res) => {
   if (category && category !== 'all') filter.category = category;
   if (featured === 'true') filter.featured = true;
 
-  const projects = await Project.find(filter).sort({ featured: -1, order: 1, createdAt: -1 });
+  const projects = await Project.find(filter)
+    .sort({ featured: -1, order: 1, createdAt: -1 });
+
   sendSuccess(res, 200, 'Projects retrieved', { count: projects.length, projects });
 });
 
@@ -99,13 +53,20 @@ exports.createProject = catchAsync(async (req, res) => {
     techStack:       parseTechStack(req.body.techStack),
   };
 
-  // Handle thumbnail upload
+  // Convert image to Base64 and store in MongoDB
   if (req.file) {
     try {
-      projectData.thumbnail = await handleImageUpload(req.file);
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        'projects',
+        req.file.mimetype
+      );
+      projectData.thumbnail = {
+        url:      result.secure_url, // Base64 data URL
+        publicId: result.public_id,
+      };
     } catch (err) {
-      console.error('Image upload error:', err.message);
-      // Continue without image — don't fail the whole request
+      console.error('Image processing error:', err.message);
     }
   }
 
@@ -124,28 +85,27 @@ exports.updateProject = catchAsync(async (req, res, next) => {
     longDescription: req.body.longDescription || project.longDescription,
     category:        req.body.category        || project.category,
     status:          req.body.status          || project.status,
-    liveUrl:         req.body.liveUrl         !== undefined ? req.body.liveUrl : project.liveUrl,
+    liveUrl:         req.body.liveUrl         !== undefined ? req.body.liveUrl   : project.liveUrl,
     githubUrl:       req.body.githubUrl       !== undefined ? req.body.githubUrl : project.githubUrl,
     featured:        req.body.featured === 'true' || req.body.featured === true,
     order:           Number(req.body.order)   || project.order,
     techStack:       parseTechStack(req.body.techStack) || project.techStack,
   };
 
-  // Handle new thumbnail
+  // Replace image with new Base64
   if (req.file) {
     try {
-      // Delete old image
-      if (project.thumbnail?.publicId) {
-        if (isCloudinaryConfigured()) {
-          const { deleteFromCloudinary } = require('../middleware/uploadMiddleware');
-          await deleteFromCloudinary(project.thumbnail.publicId).catch(() => {});
-        } else {
-          deleteLocalImage(project.thumbnail.publicId);
-        }
-      }
-      updateData.thumbnail = await handleImageUpload(req.file);
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        'projects',
+        req.file.mimetype
+      );
+      updateData.thumbnail = {
+        url:      result.secure_url,
+        publicId: result.public_id,
+      };
     } catch (err) {
-      console.error('Image upload error:', err.message);
+      console.error('Image processing error:', err.message);
     }
   }
 
@@ -157,17 +117,7 @@ exports.updateProject = catchAsync(async (req, res, next) => {
 exports.deleteProject = catchAsync(async (req, res, next) => {
   const project = await Project.findById(req.params.id);
   if (!project) return next(new AppError('Project not found', 404));
-
-  // Delete image
-  if (project.thumbnail?.publicId) {
-    if (isCloudinaryConfigured()) {
-      const { deleteFromCloudinary } = require('../middleware/uploadMiddleware');
-      await deleteFromCloudinary(project.thumbnail.publicId).catch(() => {});
-    } else {
-      deleteLocalImage(project.thumbnail.publicId);
-    }
-  }
-
+  // Image is stored in the document — deleting document deletes image too
   await project.deleteOne();
   sendSuccess(res, 200, 'Project deleted successfully');
 });
