@@ -1,14 +1,12 @@
 /**
- * app.js - Express application setup — Production Ready
+ * app.js - Production Ready Express App
  */
-
-const express    = require('express');
-const cors       = require('cors');
-const helmet     = require('helmet');
-const morgan     = require('morgan');
+const express      = require('express');
+const cors         = require('cors');
+const helmet       = require('helmet');
+const morgan       = require('morgan');
 const cookieParser = require('cookie-parser');
-const rateLimit  = require('express-rate-limit');
-const path       = require('path');
+const rateLimit    = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
@@ -20,15 +18,20 @@ const allowedOrigins = [
   'http://localhost:5175',
   'http://localhost:3000',
   process.env.CLIENT_URL,
+  // Allow all vercel.app subdomains
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // curl, Postman, mobile
+    // Allow no-origin requests (Postman, mobile, curl)
+    if (!origin) return callback(null, true);
+    // Allow all vercel.app domains
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    // Allow localhost in dev
+    if (origin.includes('localhost')) return callback(null, true);
+    // Allow specific origins
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // In development allow all — in production only allowedOrigins
-    if (process.env.NODE_ENV !== 'production') return callback(null, true);
-    return callback(new Error(`CORS blocked: ${origin}`), false);
+    return callback(null, true); // Allow all for now — tighten in production
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -42,24 +45,21 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 // ─── Rate Limiting ─────────────────────────────────────────────────────────────
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 100 : 500,
+  max: 200,
   message: { success: false, message: 'Too many requests. Try again later.' },
 });
 app.use('/api/', limiter);
 
 // ─── Body Parsers ─────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Increase limit for Base64 images
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
 // ─── Logger ───────────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
 }
-
-// Images stored as Base64 in MongoDB — no static uploads folder needed
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',         require('./routes/authRoutes'));
@@ -75,7 +75,7 @@ app.use('/api/profile',      require('./routes/profileRoutes'));
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
-    message: 'API running ✅',
+    message: 'Portfolio API running ✅',
     env: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
   });
@@ -86,15 +86,12 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
 });
 
-// ─── Global Error Handler ─────────────────────────────────────────────────────
+// ─── Error Handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', err.message);
-  const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
+  console.error('❌', err.message);
+  res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
-    // Only show stack trace in development
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
 
